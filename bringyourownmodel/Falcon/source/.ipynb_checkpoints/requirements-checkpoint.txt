@@ -1,0 +1,9 @@
+bitsandbytes==0.39.1
+peft @ git+https://github.com/huggingface/peft.git@016722addd2c18ec899d2431da54199a12d41736
+accelerate @ git+https://github.com/huggingface/accelerate.git@b16916f44795bd960bc734992d2819a955064935
+transformers @ git+https://github.com/huggingface/transformers.git@6ce6d62b6f20040129ec9831e7c4f6576402ea42
+einops==0.6.1
+safetensors==0.3.1
+xformers==0.0.20
+datasets==2.13.0
+torch @ https://download.pytorch.org/whl/cu118/torch-2.0.1%2Bcu118-cp310-cp310-linux_x86_64.whl#sha256=a7a49d459bf4862f64f7bc1a68beccf8881c2fa9f3e0569608e16ba6f85ebf7b

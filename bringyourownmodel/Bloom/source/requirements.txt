@@ -1,0 +1,7 @@
+bitsandbytes
+datasets
+accelerate==0.20.3
+transformers
+loralib
+git+https://github.com/huggingface/transformers.git@main
+git+https://github.com/huggingface/peft.git
