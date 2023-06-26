@@ -5,11 +5,19 @@ import os
 import sys
 
 import torch
+import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import prepare_model_for_kbit_training
 from peft import LoraConfig, get_peft_model
-from datasets import load_dataset
-import transformers
+from datasets import load_dataset, load_from_disk
+
+import torch.distributed as dist
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torch.utils.data
+import torch.utils.data.distributed
+from torchvision import datasets, transforms
 
 
 logger = logging.getLogger(__name__)
@@ -17,21 +25,27 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
-
 def model_fn(model_dir):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.nn.DataParallel(Net())
-    with open(os.path.join(model_dir, "model.pth"), "rb") as f:
-        model.load_state_dict(torch.load(f))
-    return model.to(device)
-
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16
+    )
+    model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config, device_map={"":0})
+    state_dict = torch.load(os.path.join(model_dir, "model.pth"),map_location='cpu')
+    model.load_state_dict(state_dict)
+    #model = torch.load(os.path.join(model_dir, "model.pth"))
+    model.eval()
+    return model.to("cpu")
+    #return model.to(device)
 
 def save_model(model, model_dir):
     logger.info("Saving the model.")
     path = os.path.join(model_dir, "model.pth")
     # recommended way from http://pytorch.org/docs/master/notes/serialization.html
     torch.save(model.cpu().state_dict(), path)
-
+    #torch.save(model.cpu(), path)
     
 def print_trainable_parameters(model):
     """
@@ -49,9 +63,11 @@ def print_trainable_parameters(model):
 
 
 if __name__ == "__main__":
-    #parser = argparse.ArgumentParser()
-
-    # Data and model checkpoints directories
+    #parser = argparse.ArgumentParser() 
+    
+    print(os.environ["SM_CHANNEL_TRAINING"])
+    print(os.listdir(os.environ["SM_CHANNEL_TRAINING"]))
+    
     model_id = "EleutherAI/gpt-neox-20b"
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -60,12 +76,13 @@ if __name__ == "__main__":
         bnb_4bit_compute_dtype=torch.bfloat16
     )
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
     model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config, device_map={"":0})
+    #model = model_fn(model, os.environ["SM_CHANNEL_TRAINING"]+"/pretrained_model")
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
     
     model.gradient_checkpointing_enable()
     model = prepare_model_for_kbit_training(model)
-    
+
     config = LoraConfig(
         r=8,
         lora_alpha=32,
@@ -78,15 +95,20 @@ if __name__ == "__main__":
     model = get_peft_model(model, config)
     print_trainable_parameters(model)
     
-    data = load_dataset("Abirate/english_quotes")
-    data = data.map(lambda samples: tokenizer(samples["quote"]), batched=True)
+    
+    #load data from local disk
+    #data = load_dataset("Abirate/english_quotes")
+    #data = data.map(lambda samples: tokenizer(samples["quote"]), batched=True)
+    
+    data = load_from_disk(os.environ["SM_CHANNEL_TRAINING"])
+    print(data)
     
     # needed for gpt-neo-x tokenizer
     tokenizer.pad_token = tokenizer.eos_token
 
     trainer = transformers.Trainer(
         model=model,
-        train_dataset=data["train"],
+        train_dataset=data,
         args=transformers.TrainingArguments(
             per_device_train_batch_size=1,
             gradient_accumulation_steps=4,
