@@ -24,56 +24,42 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
-JSON_CONTENT_TYPE = "application/json"
 
 def model_fn(model_dir):
-    print("Loading model")
+    """
+    Load the model and tokenizer for inference
+    """
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16
     )
-    model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config, device_map={"":0})
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    print("Model initialized")
-    state_dict = torch.load(os.path.join(model_dir, "model.pth"),map_location='cpu')
-    model.load_state_dict(state_dict)
-    print("Model loaded from fine tuned parameters")
-    #model = torch.load(os.path.join(model_dir, "model.pth"))
-    model.eval()
-    return model.to("cpu"), tokenizer
-    #return model.to(device)
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    model = AutoModelForCausalLM.from_pretrained(model_dir, quantization_config=bnb_config, device_map={"":0}).to(device).eval()
 
-def predict_fn(input_data, model_and_tokenizer):
+    return {"model": model, "tokenizer": tokenizer}
 
-    print("Got input Data: {}".format(input_data))
-    model, tokenizer = model_and_tokenizer
 
-    inputs = tokenizer(text, return_tensors="pt")
-    #output = model(inputs["input_ids"])
+def predict_fn(input_data, model_dict):
+    """
+    Make a prediction with the model
+    """
+    text = input_data.pop("inputs")
+
+    tokenizer = model_dict["tokenizer"]
+    model = model_dict["model"]
+   
+    inputs = tokenizer(text, return_tensors="pt").to(device)
     outputs = model.generate(**inputs, max_new_tokens=20)
+    predictions = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return [{"generated_text": prediction}]
+    return predictions
 
 
-def input_fn(serialized_input_data, content_type=JSON_CONTENT_TYPE):
-    print("INPUT1")
-    if content_type == JSON_CONTENT_TYPE:
-        print("INPUT2")
-        input_data = json.loads(serialized_input_data)
-        return input_data
-
-    else:
-        raise Exception("Requested unsupported ContentType in Accept: " + content_type)
-        return
-    
-def output_fn(prediction_output, accept=JSON_CONTENT_TYPE):
-    print("PREDICTION", prediction_output)
-
-    if accept == JSON_CONTENT_TYPE:
-        return json.dumps(prediction_output), accept
-
-    raise Exception("Requested unsupported ContentType in Accept: " + accept)
-    
+def input_fn(request_body, request_content_type):
+    """
+    Transform the input request to a dictionary
+    """
+    return json.loads(request_body)
