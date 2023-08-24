@@ -41,7 +41,7 @@ for i, chunk in enumerate(chunk_payload):
 with open('output.json', 'w') as outfile:
     json.dump(output, outfile, indent=4)
 
-pdf_json_file_name = 'v1_output.json'
+pdf_json_file_name = 'output.json'
 
 with open(pdf_json_file_name, 'r') as f:
     data = json.load(f)

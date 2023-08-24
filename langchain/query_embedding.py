@@ -6,8 +6,14 @@ from sklearn.preprocessing import normalize
 import boto3
 import numpy as np
 
+endpoint_name = "jumpstart-dft-mx-tcembedding-robertafin-large-uncased"
+
+def chunk_words(sequence, chunk_size):
+    sequence = sequence.split()
+    return [' '.join(sequence[i:i+chunk_size]) for i in range(0, len(sequence), chunk_size)]
+
 def query_vector(embedding):
-    sql = "SELECT page_number, content FROM items ORDER BY embedding <#> '" + str(embedding.tolist()) + "' LIMIT 3;"
+    sql = "SELECT page_number, content FROM v3_items ORDER BY embedding <=> '" + str(embedding) + "' LIMIT 10;"
     conn = None
     vendor_id = None
     result = None
@@ -20,7 +26,7 @@ def query_vector(embedding):
         # create a new cursor
         cur = conn.cursor()
         # execute the QUERY statement
-        cur.execute(sql, json.dumps(embedding.tolist()))
+        cur.execute(sql)
         result = cur.fetchall()
         # close communication with the database
         cur.close()
@@ -32,52 +38,51 @@ def query_vector(embedding):
     return result
 
 def query_endpoint(payload):
-    client = boto3.client("sagemaker-runtime", region_name='us-east-1')
-    endpoint_name = "jumpstart-dft-robertafin-large-wiki-uncased"
-    response = client.invoke_endpoint(
-        EndpointName=endpoint_name,
-        ContentType="application/x-text",
-        Body=json.dumps(payload),
-    )
-    response = response["Body"].read().decode("utf8")
-    response = json.loads(response)
-    return response
+    embeddings = []
+    client = boto3.client("sagemaker-runtime", region_name="us-east-1")
+    chunk_payload = chunk_words(payload, 400)
+    for i, chunk in enumerate(chunk_payload):
+        #print("Chunk ",i)
+        #print("Content ",chunk)
+        response = client.invoke_endpoint(
+            EndpointName=endpoint_name,
+            ContentType="application/x-text",
+            Body=json.dumps(chunk),
+        )    
+        response = response["Body"].read().decode("utf8")
+        response = json.loads(response)
+        embeddings_chunk = response["embedding"]
+        embeddings.append(embeddings_chunk)
+    return embeddings
 
 from sklearn.preprocessing import normalize
 
 def parse_response(query_response):
     """Parse response and return the embedding."""
-    model_predictions = query_response
-    embeddings = model_predictions["embedding"]
-    embeddings = np.array(embeddings).reshape(1, -1)
+    embeddings = np.array(query_endpoint(query_response))
+    #avg_embeddings = np.mean(embeddings, axis=0)
+    # try max pooling of embedding vector
+    avg_embeddings = np.max(embeddings, axis=0)
 
+    avg_embeddings = avg_embeddings.reshape(1, -1)
     # normalization before inner product
-    embeddings = normalize(embeddings, axis=1,norm='l2')
-    return embeddings
+    avg_embeddings = normalize(avg_embeddings, axis=1, norm='l2')
+    return np.squeeze(avg_embeddings)
 
 
 def query(query):
 
-    if query == None:
-        query = """
-We retrieve information from database, and with to fact check the following statement, based on provided information.
-
-Statement: management continuity for at least the three preceding financial years. In order words, top executive director team is consistent in previous 3 years, and do not change often.
-
-Check if the statement is valid based on all executive director's background. In addtion, please summarise why it is VALID or NOT based on the statement. The answer should not go beyond 200 words.
-"""
-
-
-    query_response = query_endpoint(query)
-    embedding = parse_response(query_response).squeeze()
-    data = query_vector(embedding)
+    query_embedding = parse_response(query).tolist()
+    #print(query_embedding)
+    data = query_vector(query_embedding)
+    #print(data)
 
 
     #for content in data:
-        #print(content)
-        #print("\n\n\n")
-
-    #print(data)
+    #    print(content)
+    #    print("\n\n\n")
 
     return data
 
+query("what are responsibilities of zhang feng?")
+query("whether this statement is valid:  management continuity for at least the three preceding financial years. In order words, top director team is consistent in previous 3 years, and do not change often")

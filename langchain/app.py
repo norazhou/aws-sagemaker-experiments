@@ -3,6 +3,8 @@ import uuid
 import sys
 
 import question_answering_llama2 as llama2
+import question_answering_openai as openai
+import question_answering_bedrock as bedrock
 
 
 USER_ICON = "images/user-icon.png"
@@ -12,7 +14,8 @@ PROVIDER_MAP = {
     'openai': 'Open AI',
     'anthropic': 'Anthropic',
     'flanxl': 'Flan XL',
-    'flanxxl': 'Flan XXL'
+    'flanxxl': 'Flan XXL',
+    'bedrock': 'Bedrock Model'
 }
 
 # Check if the user ID is already stored in the session state
@@ -42,6 +45,9 @@ if 'llm_chain' not in st.session_state:
         elif (sys.argv[1] == 'llama2'):
             st.session_state['llm_app'] = llama2
             st.session_state['llm_chain'] = llama2.build_chain()
+        elif (sys.argv[1] == 'bedrock'):
+            st.session_state['llm_app'] = bedrock
+            st.session_state['llm_chain'] = bedrock.build_chain()
         else:
             raise Exception("Unsupported LLM: ", sys.argv[1])
     else:
@@ -103,7 +109,7 @@ def write_top_bar():
             provider = PROVIDER_MAP[selected_provider]
         else:
             provider = selected_provider.capitalize()
-        header = f"An AI App powered by Amazon Kendra and {provider}!"
+        header = f"An AI App powered by PostgreSQL and {provider}!"
         st.write(f"<h3 class='main-header'>{header}</h3>", unsafe_allow_html=True)
     with col3:
         clear = st.button("Clear Chat")
@@ -137,9 +143,7 @@ def handle_input():
     
     document_list = []
     if 'source_documents' in result:
-        for d in result['source_documents']:
-            if not (d.metadata['source'] in document_list):
-                document_list.append((d.metadata['source']))
+        document_list = result['source_documents']
 
     st.session_state.answers.append({
         'answer': result,
