@@ -30,11 +30,11 @@ docs = text_splitter.split_documents(documents)
 
 connection_string = PGVector.connection_string_from_db_params(
     driver = "psycopg2",
-    port = "5432",
-    user = "postgres",
-    password = "password",
-    host = "database-1.cb1rukuxcy0o.us-east-1.rds.amazonaws.com",
-    database = "docembedding"
+    port = PORT,
+    user = USER,
+    password = PASSWORD,
+    host = DB_HOST,
+    database = DB_NAME
 )
 
 class ContentHandler(EmbeddingsContentHandler):
