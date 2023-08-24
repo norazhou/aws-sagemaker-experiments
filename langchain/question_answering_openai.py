@@ -6,7 +6,7 @@ from langchain import PromptTemplate
 
 def build_chain():
 
-    llm = OpenAI(openai_api_key="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", batch_size=5, temperature=0.2, max_tokens=30000)
+    llm = OpenAI(openai_api_key=API_KEY, batch_size=5, temperature=0.2, max_tokens=30000)
 
     prompt_template = """
 
