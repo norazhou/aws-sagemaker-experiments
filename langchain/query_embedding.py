@@ -19,10 +19,10 @@ def query_vector(embedding):
     result = None
     try:
         # connect to the PostgreSQL database
-        conn = psycopg2.connect(host="database-1.cb1rukuxcy0o.us-east-1.rds.amazonaws.com", 
-                                database="docembedding",
-                                user="postgres",
-                                password="password")
+        conn = psycopg2.connect(host=DB_HOST, 
+                                database=DB_NAME,
+                                user=USER,
+                                password=PASSWORD)
         # create a new cursor
         cur = conn.cursor()
         # execute the QUERY statement
